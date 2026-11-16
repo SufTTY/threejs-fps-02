@@ -1,182 +1,154 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Greybox Range: a three.js FPS starter</title>
-<style>
-  /* Look plan: canvas, surface, hairline, ink, muted and one accent. Every colour below is one of the six. */
-  :root {
-    --canvas: #14161a;
-    --surface: #1e2228;
-    --hairline: #2c323a;
-    --ink: #e9e6df;
-    --muted: #98a0a8;
-    --accent: #f0a830;
-    --radius-panel: 4px;
-    --radius-control: 8px;
-    --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --font-readout: ui-monospace, 'SF Mono', Menlo, monospace;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-    background: var(--canvas);
-    color: var(--ink);
-    font-family: var(--font-ui);
-  }
-  #game, #game canvas { position: fixed; inset: 0; display: block; }
-  #hud { position: fixed; inset: 0; pointer-events: none; }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OVERRUN — Wave Survival FPS</title>
+  <style>
+    :root {
+      --canvas: #242830;
+      --surface: #303741;
+      --hairline: #3e4652;
+      --ink: #e9e6df;
+      --muted: #a8b0b8;
+      --accent: #f0a830;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--canvas); overflow: hidden; }
+    body { font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', Menlo, Consolas, monospace; color: var(--ink); }
+    #game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+    #hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
 
-  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); }
-  #crosshair i { position: absolute; background: var(--ink); opacity: .85; }
-  #crosshair i:nth-child(1) { left: 10px; top: 0; width: 2px; height: 7px; }
-  #crosshair i:nth-child(2) { left: 10px; bottom: 0; width: 2px; height: 7px; }
-  #crosshair i:nth-child(3) { top: 10px; left: 0; height: 2px; width: 7px; }
-  #crosshair i:nth-child(4) { top: 10px; right: 0; height: 2px; width: 7px; }
+    /* Crosshair with spread bloom, driven by --spread from the weapon state. */
+    #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --spread: 1em; }
+    #crosshair span {
+      position: absolute; background: var(--ink); opacity: 0.9;
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+    }
+    #crosshair .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
+    #crosshair .t { width: 2px; height: 0.5em; left: -1px; top: calc(-0.5em - var(--spread)); }
+    #crosshair .b { width: 2px; height: 0.5em; left: -1px; top: var(--spread); }
+    #crosshair .l { width: 0.5em; height: 2px; top: -1px; left: calc(-0.5em - var(--spread)); }
+    #crosshair .r { width: 0.5em; height: 2px; top: -1px; left: var(--spread); }
 
-  #hitmarker { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity 90ms linear; }
-  #hitmarker.on { opacity: 1; }
-  #hitmarker i { position: absolute; background: var(--accent); }
-  #hitmarker i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
-  #hitmarker i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
-  #hitmarker i:nth-child(3) { top: 12px; left: 0; height: 2px; width: 8px; }
-  #hitmarker i:nth-child(4) { top: 12px; right: 0; height: 2px; width: 8px; }
+    #hitmarker {
+      position: absolute; left: 50%; top: 50%; width: 18px; height: 18px;
+      transform: translate(-50%, -50%); opacity: 0; transition: opacity 60ms;
+    }
+    #hitmarker::before, #hitmarker::after {
+      content: ''; position: absolute; background: var(--accent); box-shadow: 0 0 3px rgba(0,0,0,0.8);
+    }
+    #hitmarker::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    #hitmarker::after { left: 0; top: 8px; width: 18px; height: 2px; }
+    #hitmarker.on { opacity: 1; }
 
-  #ammo {
-    position: fixed;
-    right: 32px;
-    bottom: 24px;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    font-family: var(--font-readout);
-    font-size: 56px;
-    line-height: 1;
-    letter-spacing: -0.03em;
-    color: var(--ink);
-  }
-  #ammo.empty #ammo-mag { color: var(--accent); }
-  #ammo-reserve { font-size: 16px; letter-spacing: -0.01em; color: var(--muted); }
+    /* Bottom bars: health on the left, ammo on the right, score and wave centered above. */
+    #vitals { position: absolute; left: 28px; bottom: 26px; width: 240px; }
+    #health { height: 10px; background: rgba(20, 22, 26, 0.75); border: 1px solid var(--hairline); }
+    #health-fill { height: 100%; width: 100%; background: var(--ink); transition: width 140ms ease; }
+    #health.low #health-fill { background: #d4483b; }
+    #health-label { margin-top: 6px; font-size: 12px; letter-spacing: 0.12em; color: var(--muted); display: flex; justify-content: space-between; }
+    #health-value { color: var(--ink); }
 
-  #score {
-    position: fixed;
-    left: 32px;
-    bottom: 24px;
-    font-family: var(--font-readout);
-    font-size: 14px;
-    color: var(--muted);
-  }
-  #score b { color: var(--ink); font-weight: 500; }
+    #ammo { position: absolute; right: 28px; bottom: 26px; text-align: right; }
+    #ammo-mag { font-size: 34px; font-weight: 700; }
+    #ammo-reserve { font-size: 15px; color: var(--muted); }
+    #ammo.empty #ammo-mag { color: #d4483b; }
+    #ammo-label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
 
-  .overlay {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    padding: 24px;
-    background: color-mix(in srgb, var(--canvas) 86%, transparent);
-  }
-  .overlay[hidden] { display: none; }
-  .panel {
-    width: min(420px, 100%);
-    padding: 32px;
-    background: var(--surface);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
-  }
-  .panel h1 {
-    margin: 0 0 8px;
-    font-size: 32px;
-    line-height: 1.15;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-    text-wrap: balance;
-  }
-  .panel p {
-    margin: 0 0 24px;
-    max-width: 46ch;
-    font-size: 16px;
-    line-height: 1.5;
-    color: var(--muted);
-    text-wrap: pretty;
-  }
-  #play {
-    font: inherit;
-    font-weight: 500;
-    padding: 12px 16px;
-    white-space: nowrap;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-control);
-    background: var(--accent);
-    color: var(--canvas);
-    cursor: pointer;
-    transition: background-color 120ms ease;
-  }
-  #play:hover { background: var(--ink); border-color: var(--ink); }
-  #play:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #stats { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); text-align: center; }
+    #score { font-size: 26px; font-weight: 700; letter-spacing: 0.06em; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    #stats-label { font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
+    #wave-line { margin-top: 4px; font-size: 13px; letter-spacing: 0.14em; color: var(--accent); }
 
-  .keys {
-    margin: 24px 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 8px;
-    font-size: 14px;
-    color: var(--muted);
-  }
-  .keys li { display: flex; align-items: center; gap: 8px; }
-  .keys kbd {
-    min-width: 24px;
-    padding: 2px 6px;
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
-    font-family: var(--font-readout);
-    font-size: 12px;
-    color: var(--ink);
-    text-align: center;
-  }
+    #feed { position: absolute; right: 28px; top: 24px; text-align: right; font-size: 12.5px; }
+    .feed-line { color: var(--ink); opacity: 0.95; margin-bottom: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); transition: opacity 600ms; }
+    .feed-line.accent { color: var(--accent); }
+    .feed-line.fade { opacity: 0; }
 
-  @media (prefers-reduced-motion: reduce) {
-    #hitmarker, #play { transition-duration: 0.01ms; }
-  }
-</style>
+    #banner {
+      position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%) scale(0.92);
+      text-align: center; opacity: 0; transition: opacity 200ms ease, transform 200ms ease;
+    }
+    #banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    #banner-title { font-size: 42px; font-weight: 800; letter-spacing: 0.2em; color: var(--accent); text-shadow: 0 2px 10px rgba(0,0,0,0.85); }
+    #banner-sub { margin-top: 6px; font-size: 14px; letter-spacing: 0.12em; color: var(--ink); text-shadow: 0 1px 4px rgba(0,0,0,0.85); }
+
+    #vignette { position: absolute; inset: 0; opacity: 0; transition: opacity 240ms; }
+    #vignette.hurt { box-shadow: inset 0 0 140px rgba(212, 72, 59, 0.45); opacity: 1; }
+    #vignette.hit { box-shadow: inset 0 0 90px rgba(212, 72, 59, 0.6); opacity: 1; transition: none; }
+
+    /* Overlay panel: start / paused / death. */
+    #overlay {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      background: rgba(12, 13, 16, 0.72); backdrop-filter: blur(3px); pointer-events: auto;
+    }
+    #overlay[hidden] { display: none; }
+    #panel { text-align: center; max-width: 480px; padding: 32px; }
+    #overlay-title { font-size: 44px; font-weight: 800; letter-spacing: 0.22em; color: var(--accent); }
+    #overlay-copy { margin: 14px 0 22px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+    #play {
+      font: inherit; font-size: 15px; letter-spacing: 0.1em; padding: 12px 34px; cursor: pointer;
+      color: var(--canvas); background: var(--accent); border: none; border-radius: 2px;
+    }
+    #play:hover { filter: brightness(1.1); }
+    .keys { margin-top: 26px; list-style: none; display: grid; grid-template-columns: repeat(3, auto); gap: 8px 22px; justify-content: center; font-size: 12px; color: var(--muted); }
+    .keys kbd {
+      display: inline-block; min-width: 20px; padding: 2px 6px; margin-right: 4px; text-align: center;
+      border: 1px solid var(--hairline); border-radius: 3px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11px;
+    }
+  </style>
 </head>
 <body>
-<div id="game"></div>
+  <div id="game"></div>
 
-<div id="hud" aria-hidden="true">
-  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
-  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
-  <div id="ammo"><span id="ammo-mag">30</span><span id="ammo-reserve">/ 90</span></div>
-  <div id="score">Score <b id="score-value">0</b></div>
-</div>
+  <div id="hud">
+    <div id="vignette"></div>
+    <div id="crosshair"><span class="dot"></span><span class="t"></span><span class="b"></span><span class="l"></span><span class="r"></span></div>
+    <div id="hitmarker"></div>
+    <div id="stats">
+      <div id="score-value">0</div>
+      <div id="stats-label">SCORE</div>
+      <div id="wave-line"><span id="wave-value">0</span></div>
+    </div>
+    <div id="feed"></div>
+    <div id="vitals">
+      <div id="health"><div id="health-fill"></div></div>
+      <div id="health-label"><span>VITALS</span><span id="health-value">100</span></div>
+    </div>
+    <div id="ammo">
+      <div><span id="ammo-mag">30</span><span id="ammo-reserve"> / 150</span></div>
+      <div id="ammo-label">M4 CARBINE</div>
+    </div>
+    <div id="banner">
+      <div id="banner-title">WAVE 1</div>
+      <div id="banner-sub">4 drones inbound</div>
+    </div>
+  </div>
 
-<div id="overlay" class="overlay">
-  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
-    <h1 id="overlay-title">Greybox Range</h1>
-    <p id="overlay-copy">A plain room, one rifle and four targets. Click to play.</p>
-    <button id="play" type="button">Click to play</button>
-    <ul class="keys">
-      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
-      <li><kbd>Mouse</kbd> Look</li>
-      <li><kbd>Click</kbd> Fire</li>
-      <li><kbd>R</kbd> Reload</li>
-      <li><kbd>Ctrl</kbd> Crouch</li>
-      <li><kbd>Space</kbd> Jump</li>
-    </ul>
+  <section id="overlay">
+    <div id="panel">
+      <h1 id="overlay-title">OVERRUN</h1>
+      <p id="overlay-copy">Hunter drones are breaching the yard in waves. Hold out. Head shots pay double.</p>
+      <button id="play" type="button">Click to play</button>
+      <ul class="keys">
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
+        <li><kbd>Shift</kbd> Sprint</li>
+        <li><kbd>Mouse</kbd> Look</li>
+        <li><kbd>Click</kbd> Fire</li>
+        <li><kbd>R</kbd> Reload</li>
+        <li><kbd>Ctrl</kbd> Crouch</li>
+        <li><kbd>Space</kbd> Jump</li>
+        <li><kbd>Esc</kbd> Pause</li>
+      </ul>
+    </div>
   </section>
-</div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "./vendor/three/three.module.min.js"
+  <script type="importmap">
+  {
+    "imports": { "three": "./vendor/three/three.module.min.js" }
   }
-}
-</script>
-<script type="module" src="./src/main.js"></script>
+  </script>
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

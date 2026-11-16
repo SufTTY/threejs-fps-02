@@ -2,11 +2,11 @@
 // shade the game needs, so no other colour appears in the code. The same six names are
 // the CSS custom properties in index.html.
 export const PALETTE = {
-  canvas: '#14161a',
-  surface: '#1e2228',
-  hairline: '#2c323a',
+  canvas: '#242830',
+  surface: '#303741',
+  hairline: '#3e4652',
   ink: '#e9e6df',
-  muted: '#98a0a8',
+  muted: '#a8b0b8',
   accent: '#f0a830',
 };
 

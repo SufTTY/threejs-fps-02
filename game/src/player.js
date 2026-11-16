@@ -1,5 +1,6 @@
-// Player movement: acceleration, friction, gravity, crouch and jump, resolved as a box against
-// the world's colliders one axis at a time, so a wall never swallows the player.
+// Player movement and health: acceleration, friction, gravity, sprint, crouch and jump,
+// resolved as a box against the world's colliders one axis at a time. Health regenerates
+// after four seconds out of fire; damage reports through a callback so the HUD can react.
 import * as THREE from 'three';
 
 const RADIUS = 0.34;
@@ -8,29 +9,38 @@ const CROUCH_HEIGHT = 1.12;
 const STAND_EYE = 1.6;
 const CROUCH_EYE = 1.02;
 const WALK_SPEED = 5.2;
+const SPRINT_SPEED = 7.4;
 const CROUCH_SPEED = 2.4;
 const GROUND_ACCEL = 42;
 const AIR_ACCEL = 9;
 const FRICTION = 9;
 const GRAVITY = 20;
 const JUMP_SPEED = 6.2;
+const MAX_HEALTH = 100;
+const REGEN_DELAY = 4.0;
+const REGEN_RATE = 14;
 
 export function createPlayer(colliders) {
   const player = {
-    position: new THREE.Vector3(0, 0, 9.5),
+    position: new THREE.Vector3(0, 0, 10.5),
     velocity: new THREE.Vector3(),
     yaw: 0,
     pitch: 0,
     eye: STAND_EYE,
     onGround: true,
     crouching: false,
+    sprinting: false,
     height: STAND_HEIGHT,
+    health: MAX_HEALTH,
+    alive: true,
+    lastHurtAt: -100,
+    recoilPitch: 0,
+    recoilYaw: 0,
   };
   const probe = new THREE.Box3();
   const wish = new THREE.Vector3();
+  let time = 0;
 
-  // lift keeps the feet and the crown out of the horizontal tests, so standing on the floor
-  // is not read as walking into a wall.
   function overlaps(x, y, z, height, lift) {
     probe.min.set(x - RADIUS, y + lift, z - RADIUS);
     probe.max.set(x + RADIUS, y + height - lift, z + RADIUS);
@@ -44,11 +54,39 @@ export function createPlayer(colliders) {
   }
 
   function recoil(pitchKick, yawKick) {
-    player.pitch = Math.min(1.45, player.pitch + pitchKick);
-    player.yaw += yawKick;
+    // Recoil as a decaying offset: the kick bends the aim immediately and eases back,
+    // so sustained fire climbs then settles instead of drifting away forever.
+    player.recoilPitch = Math.min(0.14, player.recoilPitch + pitchKick);
+    player.recoilYaw = Math.max(-0.14, Math.min(0.14, player.recoilYaw + yawKick));
+  }
+
+  function hurt(amount, now) {
+    if (!player.alive) return false;
+    player.health -= amount;
+    player.lastHurtAt = now;
+    if (player.health <= 0) {
+      player.health = 0;
+      player.alive = false;
+    }
+    return player.alive;
+  }
+
+  function revive() {
+    player.health = MAX_HEALTH;
+    player.alive = true;
+    player.position.set(0, 0, 10.5);
+    player.velocity.set(0, 0, 0);
+    player.yaw = 0;
+    player.pitch = 0;
   }
 
   function step(dt, keys) {
+    time += dt;
+    // Recoil recovery: the kick eases back so bursts settle on target again.
+    const recovery = Math.min(1, dt * 9);
+    player.recoilPitch += (0 - player.recoilPitch) * recovery;
+    player.recoilYaw += (0 - player.recoilYaw) * recovery;
+
     const crouching = keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
     if (crouching && !player.crouching) {
       player.crouching = true;
@@ -69,7 +107,8 @@ export function createPlayer(colliders) {
       wish.set(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe).normalize();
     }
 
-    const speed = player.crouching ? CROUCH_SPEED : WALK_SPEED;
+    player.sprinting = keys.has('ShiftLeft') && forward > 0 && !player.crouching;
+    const speed = player.crouching ? CROUCH_SPEED : player.sprinting ? SPRINT_SPEED : WALK_SPEED;
     const blend = Math.min(1, (player.onGround ? GROUND_ACCEL : AIR_ACCEL) * dt / speed);
     player.velocity.x += (wish.x * speed - player.velocity.x) * blend;
     player.velocity.z += (wish.z * speed - player.velocity.z) * blend;
@@ -109,6 +148,10 @@ export function createPlayer(colliders) {
       player.onGround = true;
     }
     player.velocity.y = Math.max(-30, player.velocity.y);
+
+    if (player.alive && player.health < MAX_HEALTH && time - player.lastHurtAt > REGEN_DELAY) {
+      player.health = Math.min(MAX_HEALTH, player.health + REGEN_RATE * dt);
+    }
   }
 
   return {
@@ -116,8 +159,16 @@ export function createPlayer(colliders) {
     step,
     look,
     recoil,
+    hurt,
+    revive,
     groundSpeed() {
       return Math.hypot(player.velocity.x, player.velocity.z);
+    },
+    time() {
+      return time;
+    },
+    resetTime() {
+      time = 0;
     },
   };
 }
